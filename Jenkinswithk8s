@@ -1,0 +1,87 @@
+pipeline {
+    agent any
+    tools {
+        
+        jdk 'jdk17'
+        maven 'maven3'
+    }
+    
+    environment {
+        SCANNER_HOME= tool 'sonar-scanner'
+        SKIP_DEPLOY = 'true'
+    }
+    stages {
+        stage('Git Checkout') {
+            steps {
+                git branch: 'main', credentialsId: 'git-cred', url: 'https://github.com/arbazm10/MissionComplateCiCdJenkins.git'
+            }
+        }
+         
+        stage('Trivy Scan') {
+            steps {
+                sh "trivy fs --format table -o trivy-fs-report.html ."
+            }
+        }
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonar') {
+                    sh '''$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectKey=Mission2 -Dsonar.projectName=Mision2 -Dsonar.java.binaries=. '''
+                } 
+              }
+            }
+        stage('Maven Build') {
+            steps {
+                sh "mvn package -DskipTests=true"
+            }
+        }
+         stage('Deploy Artifacts to nexus') {
+            when {
+                expression { return env.SKIP_DEPLOY != 'true' }
+            }
+            steps {
+                withMaven(globalMavenSettingsConfig: 'maven-setting', jdk: 'jdk17', maven: 'maven3', mavenSettingsConfig: '', traceability: true) {
+                   sh "mvn deploy -DskipTests=true"
+              }
+            }
+        }
+        stage('Build & tag Docker Image') {
+            steps {
+               script {
+                   withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                       sh "docker build -t arbazm10/mission:latest ."
+                }
+               }
+            }
+        }
+        stage('Trivy Scan for docker images') {
+            steps {
+                sh "trivy image --format table -o trivy-image-report.html arbazm10/mission:latest"
+            }
+        }
+        stage('Publish Docker Image') {
+            steps {
+               script {
+                   withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                       sh "docker push arbazm10/mission:latest "
+                }
+               }
+            }
+        }
+        stage('Deploy to k8') {
+            steps {
+               withKubeConfig(caCertificate: '', clusterName: 'AM-EKS', contextName: '', credentialsId: 'k8-token', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://56EF8F68199241E9CAB9A0949442D3A8.yl4.ap-south-1.eks.amazonaws.com') {
+                  sh "kubectl apply -f deploy.yaml -n webapps"
+                  sleep 60
+              }
+            }
+        }
+        stage('Verify Deploy to k8') {
+            steps {
+               withKubeConfig(caCertificate: '', clusterName: 'AM-EKS', contextName: '', credentialsId: 'k8-token', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://56EF8F68199241E9CAB9A0949442D3A8.yl4.ap-south-1.eks.amazonaws.com') {
+                  sh "kubectl get pods -n webapps"
+                  sh "kubectl get svc -n webapps"
+              }
+            }
+        }
+    }
+}
