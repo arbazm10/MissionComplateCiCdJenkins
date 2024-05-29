@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: mission
-        image: arbazm10/mission:latest
+        image: arbazm10/mission1:latest
         ports:
         - containerPort: 8080
 
