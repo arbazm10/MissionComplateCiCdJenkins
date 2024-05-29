@@ -48,21 +48,21 @@ pipeline {
             steps {
                script {
                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
-                       sh "docker build -t arbazm10/mission:latest ."
+                       sh "docker build -t arbazm10/mission1:latest ."
                 }
                }
             }
         }
         stage('Trivy Scan for docker images') {
             steps {
-                sh "trivy image --format table -o trivy-image-report.html arbazm10/mission:latest"
+                sh "trivy image --format table -o trivy-image-report.html arbazm10/mission1:latest"
             }
         }
         stage('Publish Docker Image') {
             steps {
                script {
                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
-                       sh "docker push arbazm10/mission:latest "
+                       sh "docker push arbazm10/mission1:latest "
                 }
                }
             }
